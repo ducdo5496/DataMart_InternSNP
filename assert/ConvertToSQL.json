@@ -1,0 +1,7 @@
+{
+  "number\\([0-9]+,[0-9]+\\)": ["number", "numeric"],
+  "^date$": ["date", "datetime"],
+  "byte.$": ["byte", ""],
+  "^number\\([0-9]\\)$": ["", "int"],
+  "^varchar2": ["varchar2", "varchar"]
+}

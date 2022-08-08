@@ -1,0 +1,147 @@
+CREATE TABLE stg_Transact (
+	ITEM_KEY NUMERIC(9) primary key,
+	R_D CHAR(1),
+	ARR_TS DATETIME,
+	DEP_TS DATETIME,
+	EXEC_TIME NUMERIC(9),
+	LENGTH NUMERIC(9),
+	LOC_KEY CHAR(6),
+	AREA CHAR(5),
+	REGION CHAR(3),
+	IS_R CHAR(1),
+	IS_O CHAR(1),
+	IS_D CHAR(1),
+	IS_G CHAR(1)
+)
+
+DROP TABLE stg_Transact
+
+INSERT INTO stg_Transact
+SELECT distinct item.ITEM_KEY, pregate.R_D, item.ARR_TS, item.DEP_TS, DATEDIFF(hh, item.ARR_TS, item.DEP_TS) EXEC_TIME, item.LENGTH, replace(concat(yard.REGION, pregate.AREA),' ', '') LOC_KEY, pregate.AREA, yard.REGION,
+case when item.ITEM_KEY in (select ITEM_KEY from stg_ITEM_REEFER) THEN 1 ELSE 0 END AS IS_R,
+case when item.ITEM_KEY in (select ITEM_KEY from stg_ITEM_OOG) THEN 1 ELSE 0 END AS IS_O,
+case when item.ITEM_KEY in (select ITEM_KEY from stg_ITEM_DANGEROUS) THEN 1 ELSE 0 END AS IS_D,
+case when item.ITEM_TYPE = 'GP' THEN 1 ELSE 0 END AS IS_G
+from stg_ITEM item
+join stg_ITEM_PREGATE_TRANSACT pregate
+on item.ITEM_KEY = pregate.ITEM_KEY 
+join stg_ITEM_LOCATION loc
+on pregate.ITEM_KEY = loc.ITEM_KEY
+join stg_ITEM_YARD_AREA yard
+on pregate.AREA = yard.AREA and loc.STACK = yard.STACK
+where pregate.R_D = 'R'
+and item.ARR_BY = 'T'
+and item.PLACE_OF_RECEIPT = 'KHA'
+and item.PLACE_OF_DELIVERY = 'CTL'
+and item.SITE_ID = 'CTL'
+and item.FEL = 'F'
+and pregate.HIST_FLG = 'Y'
+UNION
+select distinct item.ITEM_KEY, pregate.R_D, item.ARR_TS, item.DEP_TS, DATEDIFF(hh, item.ARR_TS, item.DEP_TS) EXEC_TIME, item.LENGTH, replace(concat(yard.REGION, pregate.AREA),' ', '') LOC_KEY, pregate.AREA, yard.REGION,
+case when item.ITEM_KEY in (select ITEM_KEY from stg_ITEM_REEFER) THEN 1 ELSE 0 END AS IS_R,
+case when item.ITEM_KEY in (select ITEM_KEY from stg_ITEM_OOG) THEN 1 ELSE 0 END AS IS_O,
+case when item.ITEM_KEY in (select ITEM_KEY from stg_ITEM_DANGEROUS) THEN 1 ELSE 0 END AS IS_D,
+case when item.ITEM_TYPE = 'GP' THEN 1 ELSE 0 END AS IS_G
+from stg_ITEM item
+join stg_ITEM_PREGATE_TRANSACT pregate
+on item.ITEM_KEY = pregate.ITEM_KEY 
+join stg_ITEM_LOCATION loc
+on pregate.ITEM_KEY = loc.ITEM_KEY
+join stg_ITEM_YARD_AREA yard
+on pregate.AREA = yard.AREA and loc.STACK = yard.STACK
+where pregate.R_D = 'D'
+and item.DEP_BY = 'T'
+and item.PLACE_OF_RECEIPT = 'CTL'
+and item.PLACE_OF_DELIVERY = 'KHA'
+and item.SITE_ID = 'CTL'
+and item.FEL = 'F'
+and pregate.HIST_FLG = 'Y'
+
+
+
+
+
+
+create table Dim_Location (
+	LOC_KEY CHAR(6),
+	AREA CHAR(3),
+	REGION CHAR(3)
+)
+
+INSERT INTO Dim_Location 
+select replace(concat(yar.REGION, pre.AREA),' ', '') LOC_KEY, pre.AREA, yar.REGION
+from stg_ITEM_PREGATE_TRANSACT pre
+join stg_ITEM_LOCATION loc
+on pre.ITEM_KEY = loc.ITEM_KEY
+join stg_ITEM_YARD_AREA yar
+on pre.AREA = yar.AREA and loc.STACK = yar.STACK
+group by pre.AREA, yar.REGION
+
+
+CREATE TABLE Fact_Transact (
+	MONTH INT,
+	YEAR INT,
+	LOC_KEY CHAR(6),
+	QUANTITY_R_20 INT,
+	QUANTITY_R_40 INT,
+	TOTAL_CONT_R INT,
+	TOTAL_QUANTITY_R INT,
+	SUM_EXEC_R INT,
+	QUANTITY_D_20 INT,
+	QUANTITY_D_40 INT,
+	TOTAL_QUANTITY_D INT,
+	TOTAL_CONT_D INT,
+	SUM_EXEC_D INT,
+	QUANTITY_GEN_R_20 INT,
+	QUANTITY_GEN_R_40 INT,
+	QUANTITY_GEN_D_20 INT,
+	QUANTITY_GEN_D_40 INT,
+	QUANTITY_REE_R_20 INT,
+	QUANTITY_REE_R_40 INT,
+	QUANTITY_REE_D_20 INT,
+	QUANTITY_REE_D_40 INT,
+	QUANTITY_OOG_R_20 INT,
+	QUANTITY_OOG_R_40 INT,
+	QUANTITY_OOG_D_20 INT,
+	QUANTITY_OOG_D_40 INT,
+	QUANTITY_DAN_R_20 INT,
+	QUANTITY_DAN_R_40 INT,
+	QUANTITY_DAN_D_20 INT,
+	QUANTITY_DAN_D_40 INT,
+)
+
+
+DROP TABLE Fact_Transact
+
+INSERT INTO Fact_Transact
+SELECT MONTH(trans.ARR_TS) MONTH, YEAR(trans.ARR_TS) YEAR, LOC_KEY, 
+SUM(CASE WHEN trans.LENGTH = 20 AND trans.R_D = 'R' THEN 1 ELSE 0 END) QUANTITY_R_20, 
+SUM(CASE WHEN trans.LENGTH = 40 AND trans.R_D = 'R' THEN 2 ELSE 0 END) QUANTITY_R_40, 
+COUNT(CASE WHEN trans.R_D = 'R' THEN 1 END) TOTAL_CONT_R,
+SUM(CASE WHEN trans.LENGTH = 20 AND trans.R_D = 'R' THEN 1 WHEN trans.LENGTH = 40 AND trans.R_D = 'R' THEN 2 ELSE 0 END) TOTAL_QUANTITY_R, 
+SUM(CASE WHEN trans.R_D = 'R' THEN trans.EXEC_TIME ELSE 0 END) SUM_EXEC_R,
+SUM(CASE WHEN trans.LENGTH = 20 AND trans.R_D = 'D' THEN 1 ELSE 0 END) QUANTITY_D_20, 
+SUM(CASE WHEN trans.LENGTH = 40 AND trans.R_D = 'D' THEN 2 ELSE 0 END) QUANTITY_D_40, 
+SUM(CASE WHEN trans.LENGTH = 20 AND trans.R_D = 'D' THEN 1 WHEN trans.LENGTH = 40 AND trans.R_D = 'D' THEN 2 ELSE 0 END) TOTAL_QUANTITY_D, 
+COUNT(CASE WHEN trans.R_D = 'D' THEN 1 END) TOTAL_CONT_D,
+SUM(CASE WHEN trans.R_D = 'D' THEN trans.EXEC_TIME ELSE 0 END) SUM_EXEC_D,
+SUM(CASE WHEN trans.IS_G = 1 AND trans.LENGTH = 20 AND trans.R_D = 'R' THEN 1 ELSE 0 END) QUANTITY_GEN_R_20, 
+SUM(CASE WHEN trans.IS_G = 1 AND trans.LENGTH = 40 AND trans.R_D = 'R' THEN 2 ELSE 0 END) QUANTITY_GEN_R_40,  
+SUM(CASE WHEN trans.IS_G = 1 AND trans.LENGTH = 20 AND trans.R_D = 'D' THEN 1 ELSE 0 END) QUANTITY_GEN_D_20, 
+SUM(CASE WHEN trans.IS_G = 1 AND trans.LENGTH = 40 AND trans.R_D = 'D' THEN 2 ELSE 0 END) QUANTITY_GEN_D_40,  
+SUM(CASE WHEN trans.IS_R = 1 AND trans.LENGTH = 20 AND trans.R_D = 'R' THEN 1 ELSE 0 END) QUANTITY_REE_R_20, 
+SUM(CASE WHEN trans.IS_R = 1 AND trans.LENGTH = 40 AND trans.R_D = 'R' THEN 2 ELSE 0 END) QUANTITY_REE_R_40,  
+SUM(CASE WHEN trans.IS_R = 1 AND trans.LENGTH = 20 AND trans.R_D = 'D' THEN 1 ELSE 0 END) QUANTITY_REE_D_20, 
+SUM(CASE WHEN trans.IS_R = 1 AND trans.LENGTH = 40 AND trans.R_D = 'D' THEN 2 ELSE 0 END) QUANTITY_REE_D_40, 
+SUM(CASE WHEN trans.IS_O = 1 AND trans.LENGTH = 20 AND trans.R_D = 'R' THEN 1 ELSE 0 END) QUANTITY_OOG_R_20, 
+SUM(CASE WHEN trans.IS_O = 1 AND trans.LENGTH = 40 AND trans.R_D = 'R' THEN 2 ELSE 0 END) QUANTITY_OOG_R_40,  
+SUM(CASE WHEN trans.IS_O = 1 AND trans.LENGTH = 20 AND trans.R_D = 'D' THEN 1 ELSE 0 END) QUANTITY_OOG_D_20, 
+SUM(CASE WHEN trans.IS_O = 1 AND trans.LENGTH = 40 AND trans.R_D = 'D' THEN 2 ELSE 0 END) QUANTITY_OOG_D_40,  
+SUM(CASE WHEN trans.IS_D = 1 AND trans.LENGTH = 20 AND trans.R_D = 'R' THEN 1 ELSE 0 END) QUANTITY_DAN_R_20, 
+SUM(CASE WHEN trans.IS_D = 1 AND trans.LENGTH = 40 AND trans.R_D = 'R' THEN 2 ELSE 0 END) QUANTITY_DAN_R_40,  
+SUM(CASE WHEN trans.IS_D = 1 AND trans.LENGTH = 20 AND trans.R_D = 'D' THEN 1 ELSE 0 END) QUANTITY_DAN_D_20, 
+SUM(CASE WHEN trans.IS_D = 1 AND trans.LENGTH = 40 AND trans.R_D = 'D' THEN 2 ELSE 0 END) QUANTITY_DAN_D_40
+FROM stg_Transact trans
+GROUP BY YEAR(trans.ARR_TS), MONTH(trans.ARR_TS), LOC_KEY
+ORDER BY YEAR(trans.ARR_TS), MONTH(trans.ARR_TS) ASC
+
